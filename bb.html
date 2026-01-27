@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ преподавательской нагрузки</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Анализ преподавательской нагрузки</h1>
+
+        <div class="upload-section">
+            <p>Загрузите файл Excel с данными о преподавательской нагрузке</p>
+            <input type="file" id="fileInput" class="file-input" accept=".xls,.xlsx">
+            <button id="loadBtn" class="btn">Загрузить и проанализировать</button>
+
+            <div class="export-options" id="exportOptions">
+                <div class="export-input-group">
+                    <span class="export-label">Имя файла:</span>
+                    <input type="text" id="exportFileName" class="export-input" value="Нагрузка_преподавателей"
+                        placeholder="Введите имя файла">
+                    <span class="export-label" style="min-width: auto;">.xlsx</span>
+                </div>
+                <div style="margin-bottom: 15px; padding: 10px; background: #e8f4fc; border-radius: 5px;">
+                    <strong>Экспорт с отдельными листами для преподавателей</strong><br>
+                    <small>Для каждого преподавателя будет создан отдельный лист в Excel файле</small>
+                </div>
+                <button id="exportBtn" class="btn btn-success">Экспорт в Excel</button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">
+            <p>Обработка данных...</p>
+        </div>
+
+        <div id="error" class="error"></div>
+
+        <div class="main-content">
+            <div class="left-panel" id="output"></div>
+
+            <div class="right-panel">
+                <div class="teacher-panel">
+                    <h3>Прикрепление преподавателей</h3>
+                    <div class="teacher-input-group">
+                        <input type="text" id="teacherName" class="teacher-input"
+                            placeholder="Введите ФИО преподавателя">
+                        <button id="addTeacherBtn" class="btn btn-success">Добавить</button>
+                    </div>
+
+                    <div id="teacherList" class="teacher-list">
+                        <div class="no-data">Пока нет добавленных преподавателей</div>
+                    </div>
+                </div>
+
+                <div class="teacher-panel">
+                    <h3>Прикрепленные направления</h3>
+                    <div id="assignmentsList" class="teacher-assignments-container">
+                        <div class="no-data">Выберите направление и прикрепите к преподавателю</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора преподавателя -->
+    <div id="teacherModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Выберите преподавателя</h3>
+            <div id="modalTeachersList" class="modal-teachers-list"></div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button id="cancelModal" class="btn btn-danger">Отмена</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
