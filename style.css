@@ -592,4 +592,23 @@ h1 {
         min-width: auto;
         margin-bottom: 5px;
     }
+
+}
+
+.teacher-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.teacher-selection-controls {
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.teacher-selection-controls .btn-small {
+    padding: 8px 15px;
+    font-size: 0.9em;
 }
