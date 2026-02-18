@@ -40,10 +40,23 @@
             <div class="right-panel">
                 <div class="teacher-panel">
                     <h3>Прикрепление преподавателей</h3>
+
+                    <!-- Ручной ввод -->
                     <div class="teacher-input-group">
                         <input type="text" id="teacherName" class="teacher-input"
                             placeholder="Введите ФИО преподавателя">
                         <button id="addTeacherBtn" class="btn btn-success">Добавить</button>
+                    </div>
+
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #3498db;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="teacherSelect" class="teacher-input" style="flex: 1;">
+                                <option value="">Выберите преподавателя из списка</option>
+                            </select>
+                            <button id="addSelectedTeacherBtn" class="btn btn-success" style="white-space: nowrap;">
+                                Добавить
+                            </button>
+                        </div>
                     </div>
 
                     <div id="teacherList" class="teacher-list">
@@ -71,6 +84,6 @@
             </div>
         </div>
     </div>
+
 </body>
 </html>
-
