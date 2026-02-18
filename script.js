@@ -1,7 +1,31 @@
 document.getElementById('loadBtn').addEventListener('click', handleFileUpload);
 document.getElementById('addTeacherBtn').addEventListener('click', addTeacher);
+document.getElementById('addSelectedTeacherBtn').addEventListener('click', addSelectedTeacher);
 document.getElementById('cancelModal').addEventListener('click', hideModal);
 document.getElementById('exportBtn').addEventListener('click', exportToExcel);
+
+// Встроенный список преподавателей
+const BUILT_IN_TEACHERS = [
+    "Яковлева",
+    "Кареев",
+    "Белова",
+    "Рычихина",
+    "Звонарева",
+    "Мутаев",
+    "Алферова",
+    "Соловьева",
+    "Хасбулатова",
+    "Панкратова",
+    "Смирнова",
+    "Ульянкина",
+    "Берендеева",
+    "Коробова",
+    "Ситникова",
+    "Мартынов",
+    "Задорожникова",
+    "Когаловская",
+    "Птицына"
+];
 
 // Хранилище данных
 let currentData = {
@@ -15,7 +39,8 @@ let currentData = {
     columnWidths: {},
     rowHeights: {},
     mergedCells: [],
-    cellFormats: {}
+    cellFormats: {},
+    subjectNameSettings: {} // Объект для хранения настроек по каждому направлению
 };
 
 // Переменные для текущего выбранного направления/подгруппы
@@ -27,6 +52,122 @@ let currentAssignment = {
     facultyName: '',
     directionData: null
 };
+
+// Инициализация выпадающего списка при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    initTeacherSelect();
+});
+
+function initTeacherSelect() {
+    const select = document.getElementById('teacherSelect');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Выберите преподавателя из списка</option>';
+    
+    BUILT_IN_TEACHERS.forEach(teacher => {
+        const option = document.createElement('option');
+        option.value = teacher;
+        option.textContent = teacher;
+        select.appendChild(option);
+    });
+}
+
+// Обработчик выбора преподавателя из списка
+document.getElementById('teacherSelect')?.addEventListener('change', function() {
+    const selectedTeacher = this.value;
+    if (selectedTeacher) {
+        document.getElementById('teacherName').value = selectedTeacher;
+    }
+});
+
+// Обработчик кнопки добавления выбранного преподавателя
+function addSelectedTeacher() {
+    const select = document.getElementById('teacherSelect');
+    const selectedTeacher = select.value;
+    
+    if (!selectedTeacher) {
+        showError('Выберите преподавателя из списка');
+        return;
+    }
+    
+    // Проверяем, нет ли уже такого преподавателя
+    if (currentData.teachers.some(t => t.name === selectedTeacher)) {
+        showError('Преподаватель с таким ФИО уже добавлен');
+        return;
+    }
+    
+    const teacher = {
+        id: Date.now(),
+        name: selectedTeacher,
+        selected: true
+    };
+    
+    currentData.teachers.push(teacher);
+    updateTeachersDisplay();
+    
+    // Очищаем выбор
+    select.value = '';
+    document.getElementById('teacherName').value = '';
+}
+
+// Функция для форматирования чисел с запятой (ТОЛЬКО для "Итого часов")
+function formatTotalHours(value) {
+    if (value === null || value === undefined || value === '') return value;
+    
+    // Если это число, преобразуем в строку с запятой
+    if (typeof value === 'number') {
+        return value.toString().replace('.', ',');
+    }
+    
+    // Если это строка, заменяем точки на запятые
+    if (typeof value === 'string') {
+        return value.replace(/\./g, ',');
+    }
+    
+    return value;
+}
+
+// Функция для преобразования строки с запятой обратно в число для Excel
+function parseTotalHours(value) {
+    if (value === null || value === undefined || value === '') return value;
+    
+    // Если это уже число, возвращаем как есть
+    if (typeof value === 'number') return value;
+    
+    // Если это строка, пробуем преобразовать
+    if (typeof value === 'string') {
+        // Заменяем запятую на точку и парсим как число
+        const numStr = value.replace(',', '.');
+        const num = parseFloat(numStr);
+        return isNaN(num) ? value : num;
+    }
+    
+    return value;
+}
+
+// Функция для нормализации типов данных (только для "Итого часов")
+function normalizeTotalHours(data) {
+    if (!data) return data;
+    
+    return data.map(row => {
+        if (!Array.isArray(row)) return row;
+        
+        // Создаем копию строки
+        const newRow = [...row];
+        
+        // Проверяем ячейку "Итого часов" (индекс 34)
+        if (newRow.length > 34) {
+            const cell = newRow[34];
+            // Если это строка с числом, содержащим запятую
+            if (typeof cell === 'string' && cell.match(/^\d+[,]\d+$/)) {
+                // Преобразуем в число для правильной обработки
+                newRow[34] = parseFloat(cell.replace(',', '.'));
+            }
+        }
+        
+        return newRow;
+    });
+}
 
 function handleFileUpload() {
     const fileInput = document.getElementById('fileInput');
@@ -40,6 +181,7 @@ function handleFileUpload() {
     showLoading(true);
     currentData.faculties = {};
     currentData.assignments = [];
+    currentData.subjectNameSettings = {}; // Сбрасываем настройки
     updateAssignmentsDisplay();
 
     const reader = new FileReader();
@@ -50,7 +192,8 @@ function handleFileUpload() {
             const workbook = XLSX.read(data, {
                 type: 'array',
                 cellStyles: true,
-                cellNF: true // Получаем числовые форматы
+                cellNF: true,
+                raw: true
             });
 
             // Сохраняем оригинальную книгу
@@ -63,9 +206,12 @@ function handleFileUpload() {
             // Сохраняем оригинальные данные листа
             currentData.originalSheetData = XLSX.utils.sheet_to_json(worksheet, {
                 header: 1,
-                raw: false,
+                raw: true,
                 defval: ''
             });
+
+            // Нормализуем только "Итого часов"
+            currentData.originalSheetData = normalizeTotalHours(currentData.originalSheetData);
 
             // Извлекаем ВСЕ стили форматирования
             extractAllCellStyles(worksheet);
@@ -120,12 +266,17 @@ function extractAllCellStyles(worksheet) {
                     currentData.cellFormats[cellAddress] = cell.z;
                 }
 
-                // Сохраняем тип данных
+                // Сохраняем тип данных и оригинальное значение
                 if (cell.t) {
                     if (!currentData.cellStyles[cellAddress]) {
                         currentData.cellStyles[cellAddress] = {};
                     }
                     currentData.cellStyles[cellAddress].t = cell.t;
+                    
+                    // Сохраняем оригинальное значение, если оно есть
+                    if (cell.v !== undefined) {
+                        currentData.cellStyles[cellAddress].originalValue = cell.v;
+                    }
                 }
             }
         }
@@ -175,7 +326,7 @@ function processData(data) {
             currentSubject = {
                 name: row[3],
                 directions: [],
-                rowIndex: i + 4 // Сохраняем индекс строки в исходных данных
+                rowIndex: i + 4
             };
             faculties[currentFaculty].push(currentSubject);
 
@@ -193,21 +344,22 @@ function processData(data) {
                     direction.subgroupData = {
                         groups: nextRow[7] || direction.groups,
                         autumn: {
-                            lectures: nextRow[8] || 0,
-                            seminars: nextRow[9] || 0,
-                            labs: nextRow[10] || 0,
+                            lectures: nextRow[8] !== undefined ? nextRow[8] : 0,
+                            seminars: nextRow[9] !== undefined ? nextRow[9] : 0,
+                            labs: nextRow[10] !== undefined ? nextRow[10] : 0,
                             attestation: nextRow[15] || direction.autumn.attestation
                         },
                         spring: {
-                            lectures: nextRow[16] || 0,
-                            seminars: nextRow[17] || 0,
-                            labs: nextRow[18] || 0,
+                            lectures: nextRow[16] !== undefined ? nextRow[16] : 0,
+                            seminars: nextRow[17] !== undefined ? nextRow[17] : 0,
+                            labs: nextRow[18] !== undefined ? nextRow[18] : 0,
                             attestation: nextRow[23] || direction.spring.attestation
                         },
-                        total: nextRow[34] || direction.total,
+                        total: nextRow[34] !== undefined ? parseTotalHours(nextRow[34]) : direction.total,
                         preExamConsultation: nextRow[32] || '',
                         examOrTest: nextRow[33] || '',
-                        rowIndex: i + 5 // Индекс строки подгруппы
+                        rowIndex: i + 5,
+                        originalRowData: [...nextRow]
                     };
                     i++;
                 }
@@ -216,6 +368,10 @@ function processData(data) {
         // Дополнительное направление для текущего предмета
         else if (!row[3] && row[4] && currentFaculty && currentSubject) {
             const direction = addDirectionToSubject(currentSubject, row, directionIndex++, currentFaculty, i + 4);
+            
+            // Автоматически отмечаем, что это направление без названия дисциплины
+            // и по умолчанию НЕ добавляем название (можно будет включить вручную)
+            currentData.subjectNameSettings[direction.id] = false;
 
             if (i + 1 < rows.length) {
                 const nextRow = rows[i + 1];
@@ -227,21 +383,22 @@ function processData(data) {
                     direction.subgroupData = {
                         groups: nextRow[7] || direction.groups,
                         autumn: {
-                            lectures: nextRow[8] || 0,
-                            seminars: nextRow[9] || 0,
-                            labs: nextRow[10] || 0,
+                            lectures: nextRow[8] !== undefined ? nextRow[8] : 0,
+                            seminars: nextRow[9] !== undefined ? nextRow[9] : 0,
+                            labs: nextRow[10] !== undefined ? nextRow[10] : 0,
                             attestation: nextRow[15] || direction.autumn.attestation
                         },
                         spring: {
-                            lectures: nextRow[16] || 0,
-                            seminars: nextRow[17] || 0,
-                            labs: nextRow[18] || 0,
+                            lectures: nextRow[16] !== undefined ? nextRow[16] : 0,
+                            seminars: nextRow[17] !== undefined ? nextRow[17] : 0,
+                            labs: nextRow[18] !== undefined ? nextRow[18] : 0,
                             attestation: nextRow[23] || direction.spring.attestation
                         },
-                        total: nextRow[34] || direction.total,
+                        total: nextRow[34] !== undefined ? parseTotalHours(nextRow[34]) : direction.total,
                         preExamConsultation: nextRow[32] || '',
                         examOrTest: nextRow[33] || '',
-                        rowIndex: i + 5 // Индекс строки подгруппы
+                        rowIndex: i + 5,
+                        originalRowData: [...nextRow]
                     };
                     i++;
                 }
@@ -263,28 +420,49 @@ function addDirectionToSubject(subject, row, id, faculty, rowIndex) {
         studentsCount: row[6],
         groups: row[7],
         autumn: {
-            lectures: row[8] || 0,
-            seminars: row[9] || 0,
-            labs: row[10] || 0,
+            lectures: row[8] !== undefined ? row[8] : 0,
+            seminars: row[9] !== undefined ? row[9] : 0,
+            labs: row[10] !== undefined ? row[10] : 0,
             attestation: row[15] || ''
         },
         spring: {
-            lectures: row[16] || 0,
-            seminars: row[17] || 0,
-            labs: row[18] || 0,
+            lectures: row[16] !== undefined ? row[16] : 0,
+            seminars: row[17] !== undefined ? row[17] : 0,
+            labs: row[18] !== undefined ? row[18] : 0,
             attestation: row[23] || ''
         },
-        total: row[34] || 0,
+        total: row[34] !== undefined ? parseTotalHours(row[34]) : 0,
         preExamConsultation: row[32] || '',
         examOrTest: row[33] || '',
         hasSubgroup: false,
         subgroupData: null,
         rowIndex: rowIndex,
-        originalRowData: row // Сохраняем оригинальные данные строки
+        originalRowData: [...row]
     };
 
     subject.directions.push(direction);
     return direction;
+}
+
+// Функция для переключения настройки добавления названия дисциплины
+function toggleSubjectNameSetting(directionId) {
+    if (currentData.subjectNameSettings.hasOwnProperty(directionId)) {
+        currentData.subjectNameSettings[directionId] = !currentData.subjectNameSettings[directionId];
+    } else {
+        // Если настройки еще нет, создаем со значением true
+        currentData.subjectNameSettings[directionId] = true;
+    }
+    
+    // Обновляем отображение, чтобы показать изменение
+    updateDirectionCheckboxDisplay(directionId);
+}
+
+// Функция для обновления отображения чекбокса
+function updateDirectionCheckboxDisplay(directionId) {
+    const checkbox = document.getElementById(`subject_checkbox_${directionId}`);
+    if (checkbox) {
+        checkbox.checked = currentData.subjectNameSettings[directionId] || false;
+    }
 }
 
 function exportToExcel() {
@@ -397,9 +575,16 @@ function createTeacherSheet(teacher, assignments) {
     let exportData = [];
     let currentRow = 0;
 
-    // Копируем заголовочные строки
+    // Копируем заголовочные строки с сохранением оригинальных значений
     for (let i = 0; i < currentData.headerRows.length; i++) {
-        exportData.push([...currentData.headerRows[i]]);
+        const headerRow = [];
+        for (let col = 0; col < 35; col++) {
+            let cellValue = currentData.headerRows[i][col];
+            
+            // Для заголовков не преобразуем числа
+            headerRow.push(cellValue !== undefined ? cellValue : '');
+        }
+        exportData.push(headerRow);
         currentRow++;
     }
 
@@ -444,16 +629,12 @@ function exportTeacherAssignments(ws, exportData, startRow, assignments) {
             ? directionData.subgroupData.rowIndex
             : directionData.rowIndex;
 
-        // Копируем строку из оригинала
-        const originalRow = currentData.originalSheetData[sourceRowIndex];
-        if (!originalRow) continue;
-
-        // Добавляем информацию о строке для дальнейшей обработки
         rowsToExport.push({
             sourceRowIndex: sourceRowIndex,
-            originalRow: originalRow,
             directionData: directionData,
-            isSubgroup: assignment.isSubgroup
+            isSubgroup: assignment.isSubgroup,
+            subjectName: assignment.subjectName,
+            directionId: assignment.directionId
         });
     }
 
@@ -463,18 +644,44 @@ function exportTeacherAssignments(ws, exportData, startRow, assignments) {
     // Теперь обрабатываем строки, сохраняя оригинальные данные
     for (let i = 0; i < rowsToExport.length; i++) {
         const rowData = rowsToExport[i];
-        const newRow = [...rowData.originalRow];
-
-        // НЕ изменяем название дисциплины (колонка 3, индекс 2)
-        // Оставляем оригинальное значение из файла
-
-        // Обрезаем массив до 35 колонок (по количеству колонок в таблице)
+        
+        // Получаем оригинальную строку
+        const originalRow = currentData.originalSheetData[rowData.sourceRowIndex];
+        if (!originalRow) continue;
+        
+        // Используем оригинальную строку как основу
+        const newRow = [...originalRow];
+        
+        // Обрезаем или дополняем до 35 колонок
         if (newRow.length > 35) {
             newRow.splice(35, newRow.length - 35);
         } else if (newRow.length < 35) {
-            // Дополняем до 35 колонок пустыми значениями
             while (newRow.length < 35) {
                 newRow.push('');
+            }
+        }
+        
+        // ИНДИВИДУАЛЬНАЯ НАСТРОЙКА: Добавляем название дисциплины только если для этого направления включена галочка
+        const isSubjectNameEmpty = !newRow[3] || newRow[3] === '' || String(newRow[3]).trim() === '';
+        const shouldAddSubjectName = currentData.subjectNameSettings[rowData.directionId] || false;
+        
+        if (isSubjectNameEmpty && shouldAddSubjectName && rowData.subjectName) {
+            // Добавляем название дисциплины
+            newRow[3] = rowData.subjectName;
+        }
+        
+        // Преобразуем только "Итого часов" (колонка 34, индекс 34) для правильного отображения в Excel
+        if (newRow.length > 34) {
+            const totalValue = newRow[34];
+            const cellAddress = XLSX.utils.encode_cell({ r: rowData.sourceRowIndex, c: 34 });
+            const cellFormat = currentData.cellFormats[cellAddress];
+            
+            // Если это строка с числом и есть числовой формат, преобразуем в число
+            if (cellFormat && typeof totalValue === 'string' && totalValue.match(/^[\d\s,]+$/)) {
+                const numValue = parseTotalHours(totalValue);
+                if (typeof numValue === 'number') {
+                    newRow[34] = numValue;
+                }
             }
         }
 
@@ -488,13 +695,12 @@ function exportTeacherAssignments(ws, exportData, startRow, assignments) {
         rowIndex++;
     }
 
-    console.log(`Экспортировано ${rowsAdded} строк с сохранением оригинальных данных`);
+    console.log(`Экспортировано ${rowsAdded} строк.`);
     return rowsAdded;
 }
 
 function cleanSheetName(name) {
     // Очищаем имя для использования в качестве имени листа Excel
-    // Excel имеет ограничения: не более 31 символа, нельзя использовать: \ / ? * [ ] :
     let cleaned = name.replace(/[\\/*?[\]:]/g, '');
     cleaned = cleaned.substring(0, 31);
 
@@ -585,7 +791,7 @@ function addTeacher() {
     const teacher = {
         id: Date.now(),
         name: teacherName,
-        selected: true // По умолчанию выбран для экспорта
+        selected: true
     };
 
     currentData.teachers.push(teacher);
@@ -949,7 +1155,7 @@ function displayData(faculties) {
             <p>Всего факультетов: ${Object.keys(faculties).length}</p>
             <p>Всего дисциплин: ${totalSubjects}</p>
             <p>Всего направлений: ${totalDirections} (из них с подгруппами: ${totalSubgroups})</p>
-            <p>Общее количество часов: ${totalHours}</p>
+            <p>Общее количество часов: ${formatTotalHours(totalHours)}</p>
         </div>
     `;
 
@@ -996,16 +1202,40 @@ function displayData(faculties) {
 
             subject.directions.forEach((direction, index) => {
                 const directionClass = direction.hasSubgroup ? 'direction-item has-subgroup' : 'direction-item';
-
-                const directionAssignments = currentData.assignments.filter(a => a.directionId == direction.id);
-                const mainAssignments = directionAssignments.filter(a => !a.isSubgroup);
-                const subgroupAssignments = directionAssignments.filter(a => a.isSubgroup);
+                
+                // Проверяем, пустое ли название дисциплины в оригинальной строке
+                const isSubjectNameEmpty = !direction.originalRowData[3] || direction.originalRowData[3] === '';
+                
+                // Получаем текущую настройку для этого направления
+                const subjectNameSetting = currentData.subjectNameSettings[direction.id] || false;
 
                 subjectHTML += `
                     <div class="${directionClass}" data-id="${direction.id}">
                         <button class="assign-btn" onclick="showAssignModal('${direction.id}', false)">
                             Прикрепить направление
                         </button>
+                `;
+                
+                // Добавляем чекбокс только для направлений без названия дисциплины
+                if (isSubjectNameEmpty) {
+                    subjectHTML += `
+                        <div style="margin-bottom: 10px; padding: 5px; background: #f0f7ff; border-radius: 3px; border-left: 3px solid #3498db;">
+                            <input type="checkbox" 
+                                   id="subject_checkbox_${direction.id}" 
+                                   onchange="toggleSubjectNameSetting('${direction.id}')"
+                                   ${subjectNameSetting ? 'checked' : ''}
+                                   style="margin-right: 8px; cursor: pointer;">
+                            <label for="subject_checkbox_${direction.id}" style="cursor: pointer; color: #2c3e50;">
+                                <strong>Добавить название дисциплины при экспорте</strong>
+                                <span style="display: block; font-size: 0.85em; color: #666; margin-top: 3px;">
+                                    (В исходном файле название дисциплины отсутствует)
+                                </span>
+                            </label>
+                        </div>
+                    `;
+                }
+                
+                subjectHTML += `
                         <div class="detail-item">
                             <span class="detail-label">Направление ${index + 1}:</span> ${direction.code}
                         </div>
@@ -1034,7 +1264,7 @@ function displayData(faculties) {
                                 Форма пром. аттест: ${direction.spring.attestation}
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">Итого часов:</span> ${direction.total}
+                                <span class="detail-label">Итого часов:</span> ${formatTotalHours(direction.total)}
                             </div>
                             <div class="detail-item">
                                 <span class="detail-label">Предэкз. конс.:</span> ${direction.preExamConsultation || ' '}
@@ -1072,7 +1302,7 @@ function displayData(faculties) {
                                     Форма пром. аттест: ${direction.subgroupData.spring.attestation}
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Итого часов (подгруппа):</span> ${direction.subgroupData.total}
+                                    <span class="detail-label">Итого часов (подгруппа):</span> ${formatTotalHours(direction.subgroupData.total)}
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Предэкз. конс.(подгруппа):</span> ${direction.subgroupData.preExamConsultation || ' '}
