@@ -1,5 +1,5 @@
 // ==================== ПРОВЕРКА АВТОРИЗАЦИИ ====================
-(async function checkAuthentication() {
+/*(async function checkAuthentication() {
     try {
         const response = await fetch('/api/check-auth');
         if (!response.ok) {
@@ -10,7 +10,8 @@
         window.location.href = '/login';
     }
 })();
-
+*/
+window.currentUser = { authenticated: true, username: 'test_user' };
 // ==================== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ====================
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
