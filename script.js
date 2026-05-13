@@ -1,18 +1,3 @@
-// ==================== ПРОВЕРКА АВТОРИЗАЦИИ ====================
-/*(async function checkAuthentication() {
-    try {
-        const response = await fetch('/api/check-auth');
-        if (!response.ok) {
-            window.location.href = '/login';
-        }
-    } catch (error) {
-        console.error('Ошибка проверки аутентификации:', error);
-        window.location.href = '/login';
-    }
-})();
-*/
-console.log('Серверная часть отключена - работаем локально');
-document.getElementById('currentUser').textContent = '👤 Локальный режим';
 // ==================== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ====================
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -24,11 +9,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             content.classList.remove('active');
         });
         document.getElementById(tabName + '-app').classList.add('active');
-
-        // При переключении на вкладку "Мои файлы" загружаем список
-        if (tabName === 'myfiles') {
-            loadMyFiles();
-        }
     });
 });
 
@@ -513,30 +493,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         }
     }
 
-    // ==================== НОВОЕ: Отправка файла на сервер ====================
-    async function uploadWorkloadFileToServer(blob, filename) {
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        formData.append('filename', filename);
-
-        try {
-            const response = await fetch('/api/upload-workload-file', {
-                method: 'POST',
-                body: formData
-            });
-            if (!response.ok) {
-                const error = await response.json();
-                console.error('Ошибка сохранения на сервере:', error);
-                return false;
-            }
-            console.log('Файл преподавательской нагрузки сохранён на сервере');
-            return true;
-        } catch (error) {
-            console.error('Ошибка сети при сохранении:', error);
-            return false;
-        }
-    }
-
     function exportToExcel() {
         if (!currentData.originalSheetData) {
             showErrorWorkload('Сначала загрузите файл');
@@ -596,7 +552,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
 
-            // Генерация Blob для скачивания и отправки на сервер
+            // Генерация Blob для скачивания
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
@@ -610,17 +566,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            // Отправка на сервер
-            /*
-            uploadWorkloadFileToServer(blob, fileName).then(success => {
-                if (success) {
-                    showMessageWorkload('Файл успешно экспортирован и сохранён на сервере', 'success');
-                } else {
-                    showMessageWorkload('Файл экспортирован, но не сохранён на сервере', 'info');
-                }
-            });
-            */
-            showMessageWorkload('Файл успешно экспортирован (сохранение на сервере отключено)', 'success');
+            showMessageWorkload('Файл успешно экспортирован', 'success');
+            showLoadingWorkload(false);
 
         } catch (error) {
             showLoadingWorkload(false);
@@ -878,7 +825,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         updateTeachersDisplay();
     }
 
-    async function assignTeacherToCurrent(teacherId) {
+    function assignTeacherToCurrent(teacherId) {
         const assignment = {
             id: Date.now(),
             teacherId: teacherId,
@@ -894,33 +841,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         updateTeachersDisplay();
         updateDirectionDisplays();
         hideModal();
-
-        // Сохранение на сервер
-        const teacher = currentData.teachers.find(t => t.id === teacherId);
-        if (teacher) {
-            /*
-            try {
-                await fetch('/api/assignments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        teacher_name: teacher.name.trim(),
-                        direction_code: currentAssignment.directionCode.trim(),
-                        subject_name: currentAssignment.subjectName.trim(),
-                        faculty_name: currentAssignment.facultyName.trim(),
-                        is_subgroup: currentAssignment.isSubgroup,
-                        course: (currentAssignment.directionData?.course || '').trim()
-                    })
-                });
-            } catch (error) {
-                console.error('Ошибка сохранения назначения:', error);
-            }
-            */
-            console.log('Назначение сохранено локально:', {
-                teacher_name: teacher.name.trim(),
-                direction_code: currentAssignment.directionCode.trim()
-            });
-        }
     }
     
     function hideModal() {
@@ -935,33 +855,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         };
     }
 
-    async function removeAssignment(assignmentId) {
-        const assignment = currentData.assignments.find(a => a.id === assignmentId);
-        const teacher = assignment ? currentData.teachers.find(t => t.id === assignment.teacherId) : null;
-
+    function removeAssignment(assignmentId) {
         currentData.assignments = currentData.assignments.filter(a => a.id !== assignmentId);
         updateTeachersDisplay();
         updateDirectionDisplays();
-
-        if (teacher && assignment) {
-            /*
-            try {
-                await fetch('/api/assignments/delete-by-params', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        teacher_name: teacher.name,
-                        direction_code: assignment.directionCode,
-                        is_subgroup: assignment.isSubgroup
-                    })
-                });
-            } catch (error) {
-                console.error('Ошибка удаления назначения:', error);
-            }
-            */
-        }
     }
-    
 
     function updateTeachersDisplay() {
         const teacherList = document.getElementById('teacherList');
@@ -1465,7 +1363,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         showLoadingWorkload(false);
     }
 
-
+    async function applyHistoricalAssignments() {
+        showMessageWorkload('Восстановление истории отключено (локальная версия)', 'info');
+    }
 
     function showLoadingWorkload(show) {
         document.getElementById('loadingWorkload').style.display = show ? 'block' : 'none';
@@ -1619,8 +1519,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // ==================== ПРИЛОЖЕНИЕ 2: РАСПРЕДЕЛЕНИЕ ПО КАФЕДРАМ ====================
 (function() {
-    const SERVER_URL = 'http://localhost:5000';
-
     let coursesData = {};
     let currentViewMode = 'course';
     let currentDeptForAppend = null;
@@ -1997,11 +1895,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                         </div>
                         <div class="department-stats">
                             <span>${disciplines.length} дисц. / ${practices.length} практ.</span>
-                            <button class="btn-export-dept" onclick="event.stopPropagation(); exportDepartmentExcel('${code}', '${fullName.replace(/'/g, "\\'")}')" title="Скачать Excel для этой кафедры"> 📥 Excel
-                            </button>
                             <button class="btn-preview-dept" onclick="event.stopPropagation(); showDepartmentPreview('${code}', '${fullName.replace(/'/g, "\\'")}')" title="Предпросмотр данных кафедры"> 👁 Предпросмотр
-                            </button>
-                            <button class="btn-append-dept" onclick="event.stopPropagation(); showFileSelectModal('${code}', '${fullName.replace(/'/g, "\\'")}')" title="Добавить данные в существующий файл"> 📎 Добавить в файл
                             </button>
                         </div>
                         <div class="dept-course-filter" style="margin-top:5px;" onclick="event.stopPropagation();">
@@ -2101,7 +1995,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             return;
         }
 
-        // Фильтр по курсу
         const courseFilter = deptCourseFilter[deptCode] || 'all';
         let disc = deptData.disciplines;
         let pract = deptData.practices;
@@ -2145,218 +2038,55 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 </thead>
                 <tbody>`;
 
-        disc.forEach(d => {
-            // Приведение к числу, если возможно
-            const toNum = val => { const n = parseFloat(val); return isNaN(n) ? 0 : n; };
-            const totalHours = toNum(d.lecAutumn) + toNum(d.labAutumn) + toNum(d.pracAutumn) +
-                               toNum(d.lecSpring) + toNum(d.labSpring) + toNum(d.pracSpring);
-            const totalStr = totalHours > 0 ? totalHours.toString().replace('.', ',') : '';
+            disc.forEach(d => {
+                const toNum = val => { const n = parseFloat(val); return isNaN(n) ? 0 : n; };
+                const totalHours = toNum(d.lecAutumn) + toNum(d.labAutumn) + toNum(d.pracAutumn) +
+                                   toNum(d.lecSpring) + toNum(d.labSpring) + toNum(d.pracSpring);
+                const totalStr = totalHours > 0 ? totalHours.toString().replace('.', ',') : '';
 
-            html += `<tr>
-                <td>${d.name}</td>
-                <td></td>
-                <td>${d.course}</td>
-                <td></td>
-                <td></td>
-                <td>${d.lecAutumn}</td>
-                <td>${d.pracAutumn}</td>
-                <td>${d.labAutumn}</td>
-                <td>${d.controlAutumn || ''}</td>
-                <td>${d.lecSpring}</td>
-                <td>${d.pracSpring}</td>
-                <td>${d.labSpring}</td>
-                <td>${d.controlSpring || ''}</td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>`;
-        });
-        html += `</tbody></table>`;
-    }
-
-    if (pract.length > 0) {
-        html += `<h4>Практики</h4>`;
-        html += `<table class="preview-table">
-            <thead>
-                <tr>
-                    <th>Курс</th>
-                    <th>Наименование</th>
-                    <th>Контроль</th>
-                </tr>
-            </thead>
-            <tbody>`;
-        pract.forEach(p => {
-            const ctrl = p.controlAutumn || p.controlSpring || 'ЗаО';
-            html += `<tr><td>${p.course}</td><td>${p.name}</td><td>${ctrl}</td></tr>`;
-        });
-        html += `</tbody></table>`;
-    }
-
-    document.getElementById('previewTitle').textContent = `Предпросмотр: Кафедра ${deptCode}`;
-    document.getElementById('previewContent').innerHTML = html;
-    document.getElementById('previewModal').style.display = 'flex';
-    }
-    
-        // ---------------------------- Модальное окно выбора файла ----------------------------
-    function showFileSelectModal(deptCode, deptName) {
-        currentDeptForAppend = { code: deptCode, name: deptName, data: null };
-
-        // Собираем и фильтруем данные кафедры
-        const courseFilter = deptCourseFilter[deptCode] || 'all';
-        const deptData = { disciplines: [], practices: [] };
-        for (const course in coursesData) {
-            coursesData[course].forEach(item => {
-                const code = item.departmentCode || 'Без кафедры';
-                if (code === deptCode) {
-                    const itemWithCourse = { ...item, course };
-                    if (item.isPractice) {
-                        deptData.practices.push(itemWithCourse);
-                    } else {
-                        deptData.disciplines.push(itemWithCourse);
-                    }
-                }
+                html += `<tr>
+                    <td>${d.name}</td>
+                    <td></td>
+                    <td>${d.course}</td>
+                    <td></td>
+                    <td></td>
+                    <td>${d.lecAutumn}</td>
+                    <td>${d.pracAutumn}</td>
+                    <td>${d.labAutumn}</td>
+                    <td>${d.controlAutumn || ''}</td>
+                    <td>${d.lecSpring}</td>
+                    <td>${d.pracSpring}</td>
+                    <td>${d.labSpring}</td>
+                    <td>${d.controlSpring || ''}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>`;
             });
+            html += `</tbody></table>`;
         }
-        let disc = deptData.disciplines;
-        let pract = deptData.practices;
-        if (courseFilter !== 'all') {
-            disc = disc.filter(d => d.course === courseFilter);
-            pract = pract.filter(p => p.course === courseFilter);
-        }
-        currentDeptForAppend = {
-            code: deptCode,
-            name: deptName,
-            data: { disciplines: disc, practices: pract },
-            course: courseFilter !== 'all' ? courseFilter : null
-        };
 
-        // Загружаем список файлов пользователя
-        const listContainer = document.getElementById('fileSelectList');
-        listContainer.innerHTML = '<div class="loading">Загрузка списка файлов...</div>';
-        document.getElementById('fileSelectModal').style.display = 'flex';
-
-        fetch('/api/my-files')
-            .then(response => response.json())
-            .then(files => {
-                if (files.length === 0) {
-                    listContainer.innerHTML = '<div class="no-data">Нет доступных файлов</div>';
-                    return;
-                }
-                let html = '<div style="display: grid; gap: 10px;">';
-                files.forEach(file => {
-                    const date = new Date(file.created_at).toLocaleString('ru-RU');
-                    html += `
-                        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: background 0.3s;"
-                             onclick="appendToSelectedFile(${file.id})"
-                             onmouseover="this.style.background='#f0f7ff'"
-                             onmouseout="this.style.background='white'">
-                            <strong>${file.filename}</strong><br>
-                            <small>${file.file_type === 'workload' ? 'Нагрузка' : 'Кафедры'} | ${date} | ${(file.file_size/1024).toFixed(2)} КБ</small>
-                        </div>`;
-                });
-                html += '</div>';
-                listContainer.innerHTML = html;
-            })
-            .catch(error => {
-                listContainer.innerHTML = `<div class="error">Ошибка загрузки: ${error.message}</div>`;
+        if (pract.length > 0) {
+            html += `<h4>Практики</h4>`;
+            html += `<table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>Курс</th>
+                        <th>Наименование</th>
+                        <th>Контроль</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            pract.forEach(p => {
+                const ctrl = p.controlAutumn || p.controlSpring || 'ЗаО';
+                html += `<tr><td>${p.course}</td><td>${p.name}</td><td>${ctrl}</td></tr>`;
             });
-    }
-
-    window.showFileSelectModal = showFileSelectModal;
-
-    
-
-    window.appendToSelectedFile = appendToSelectedFile;
-
-    async function exportDepartmentExcel(deptCode, deptName) {
-        const deptData = { disciplines: [], practices: [] };
-        
-        for (const course in coursesData) {
-            coursesData[course].forEach(item => {
-                const code = item.departmentCode || 'Без кафедры';
-                
-                if (code === deptCode) {
-                    const itemWithCourse = { ...item, course };
-                    if (item.isPractice) {
-                        deptData.practices.push(itemWithCourse);
-                    } else {
-                        deptData.disciplines.push(itemWithCourse);
-                    }
-                }
-            });
-        }
-        
-        // Фильтр по курсу
-        const courseFilter = deptCourseFilter[deptCode] || 'all';
-        let filteredDisciplines = deptData.disciplines;
-        let filteredPractices = deptData.practices;
-        if (courseFilter !== 'all') {
-            filteredDisciplines = deptData.disciplines.filter(d => d.course === courseFilter);
-            filteredPractices = deptData.practices.filter(p => p.course === courseFilter);
-        }
-        if (filteredDisciplines.length === 0 && filteredPractices.length === 0) {
-            showErrorDisciplines('Нет данных для выбранного курса');
-            return;
+            html += `</tbody></table>`;
         }
 
-        const buttons = document.querySelectorAll('.btn-export-dept');
-        let targetButton = null;
-        
-        buttons.forEach(btn => {
-            const deptSection = btn.closest('.department-section');
-            if (deptSection) {
-                const deptCodeElement = deptSection.querySelector('.department-code');
-                if (deptCodeElement && deptCodeElement.textContent.includes(deptCode)) {
-                    targetButton = btn;
-                    btn.textContent = '⏳';
-                    btn.disabled = true;
-                }
-            }
-        });
-        
-
-        try {
-            /*
-            const response = await fetch(`${SERVER_URL}/generate-department-excel`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    departmentData: { disciplines: filteredDisciplines, practices: filteredPractices },
-                    departmentName: deptName,
-                    departmentCode: deptCode,
-                    course: courseFilter !== 'all' ? courseFilter : null
-                })
-            });
-            */
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Ошибка при генерации файла');
-            }
-            
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            const safeName = deptName.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_');
-            a.download = `Кафедра_${deptCode}_${safeName}.xlsx`;
-            
-            document.body.appendChild(a);
-            a.click();
-            
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            
-        } catch (error) {
-            showErrorDisciplines(`Ошибка при экспорте: ${error.message}`);
-            console.error('Export error:', error);
-        } finally {
-            if (targetButton) {
-                targetButton.textContent = '📥 Excel';
-                targetButton.disabled = false;
-            }
-        }
+        document.getElementById('previewTitle').textContent = `Предпросмотр: Кафедра ${deptCode}`;
+        document.getElementById('previewContent').innerHTML = html;
+        document.getElementById('previewModal').style.display = 'flex';
     }
 
     function showLoadingDisciplines(show) {
@@ -2405,95 +2135,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         });
     };
         
-    window.exportDepartmentExcel = exportDepartmentExcel;
     window.showDepartmentPreview = showDepartmentPreview;
 
 })();
-
-// ==================== ПРИЛОЖЕНИЕ 3: МОИ ФАЙЛЫ ====================
-function loadMyFiles() {
-    const container = document.getElementById('filesList');
-    container.innerHTML = '<div class="loading">Загрузка списка файлов...</div>';
-
-    fetch('/api/my-files')
-        .then(response => {
-            if (!response.ok) throw new Error('Ошибка загрузки');
-            return response.json();
-        })
-        .then(files => {
-            if (files.length === 0) {
-                container.innerHTML = '<div class="no-data">У вас пока нет сохранённых файлов</div>';
-                return;
-            }
-
-            let html = `
-                <table class="discipline-table">
-                    <thead>
-                        <tr>
-                            <th>Имя файла</th>
-                            <th>Тип</th>
-                            <th>Дата создания</th>
-                            <th>Размер</th>
-                            <th>Действия</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            files.forEach(file => {
-                const typeText = file.file_type === 'workload' ? 'Преподавательская нагрузка' : 'Распределение по кафедрам';
-                const date = new Date(file.created_at).toLocaleString('ru-RU');
-                const size = file.file_size ? (file.file_size / 1024).toFixed(2) + ' КБ' : '—';
-
-                html += `
-                    <tr>
-                        <td>${file.filename}</td>
-                        <td>${typeText}</td>
-                        <td>${date}</td>
-                        <td>${size}</td>
-                        <td>
-                            <button class="btn btn-small btn-success" onclick="downloadUserFile(${file.id})">Скачать</button>
-                            <button class="btn btn-small btn-danger" onclick="deleteUserFile(${file.id})">Удалить</button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        })
-        .catch(error => {
-            container.innerHTML = `<div class="error">Ошибка: ${error.message}</div>`;
-        });
-}
-
-window.downloadUserFile = function(fileId) {
-    window.location.href = `/api/download-file/${fileId}`;
-};
-
-window.deleteUserFile = function(fileId) {
-    if (!confirm('Удалить файл?')) return;
-
-    fetch(`/api/delete-file/${fileId}`, { method: 'DELETE' })
-        .then(response => {
-            if (response.ok) {
-                loadMyFiles(); // Обновить список
-            } else {
-                alert('Ошибка при удалении файла');
-            }
-        })
-        .catch(error => {
-            alert('Ошибка сети: ' + error.message);
-        });
-};
-
-// ==================== АВТОРИЗАЦИЯ: ВЫХОД И ИМЯ ПОЛЬЗОВАТЕЛЯ ====================
-// document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-  //  await fetch('/logout');
-   // window.location.href = '/login';
-//});
-
-// Если вкладка "Мои файлы" активна при загрузке (редко), загружаем список
-if (document.getElementById('myfiles-app')?.classList.contains('active')) {
-    loadMyFiles();
-}
