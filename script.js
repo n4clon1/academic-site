@@ -11,7 +11,8 @@
     }
 })();
 */
-window.currentUser = { authenticated: true, username: 'test_user' };
+console.log('Серверная часть отключена - работаем локально');
+document.getElementById('currentUser').textContent = '👤 Локальный режим';
 // ==================== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ====================
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -610,6 +611,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             URL.revokeObjectURL(url);
 
             // Отправка на сервер
+            /*
             uploadWorkloadFileToServer(blob, fileName).then(success => {
                 if (success) {
                     showMessageWorkload('Файл успешно экспортирован и сохранён на сервере', 'success');
@@ -617,8 +619,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     showMessageWorkload('Файл экспортирован, но не сохранён на сервере', 'info');
                 }
             });
-
-            showLoadingWorkload(false);
+            */
+            showMessageWorkload('Файл успешно экспортирован (сохранение на сервере отключено)', 'success');
 
         } catch (error) {
             showLoadingWorkload(false);
@@ -896,6 +898,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         // Сохранение на сервер
         const teacher = currentData.teachers.find(t => t.id === teacherId);
         if (teacher) {
+            /*
             try {
                 await fetch('/api/assignments', {
                     method: 'POST',
@@ -912,6 +915,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             } catch (error) {
                 console.error('Ошибка сохранения назначения:', error);
             }
+            */
+            console.log('Назначение сохранено локально:', {
+                teacher_name: teacher.name.trim(),
+                direction_code: currentAssignment.directionCode.trim()
+            });
         }
     }
     
@@ -936,6 +944,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         updateDirectionDisplays();
 
         if (teacher && assignment) {
+            /*
             try {
                 await fetch('/api/assignments/delete-by-params', {
                     method: 'POST',
@@ -949,6 +958,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             } catch (error) {
                 console.error('Ошибка удаления назначения:', error);
             }
+            */
         }
     }
     
@@ -1455,100 +1465,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         showLoadingWorkload(false);
     }
 
-    async function applyHistoricalAssignments() {
-        try {
-            const response = await fetch('/api/assignments');
-            if (!response.ok) throw new Error('Ошибка загрузки истории');
-            const saved = await response.json();
 
-            if (!saved.length) {
-                showMessageWorkload('Нет сохранённых назначений для восстановления', 'info');
-                return;
-            }
-
-             // Подготовим карту для быстрого поиска направлений по ключу: faculty|subject|code
-            const directionMap = new Map();
-            for (const facultyName in currentData.faculties) {
-                const subjects = currentData.faculties[facultyName];
-                for (const subject of subjects) {
-                    const subjectNameClean = (subject.name || '').trim().toLowerCase();
-                    for (const dir of subject.directions) {
-                        const codeClean = (dir.code || '').trim().toLowerCase();
-                        const key = `${facultyName.trim().toLowerCase()}|${subjectNameClean}|${codeClean}`;
-                        directionMap.set(key, dir);
-                    }
-                }
-            }
-            let restored = 0;
-            let notFound = 0;
-            let skippedExists = 0;
-
-             // Обрабатываем каждое сохранённое назначение
-            for (const a of saved) {
-                const facultyClean = (a.faculty_name || '').trim().toLowerCase();
-                const subjectClean = (a.subject_name || '').trim().toLowerCase();
-                const codeClean = (a.direction_code || '').trim().toLowerCase();
-                const key = `${facultyClean}|${subjectClean}|${codeClean}`;
-
-                const directionData = directionMap.get(key);
-                if (!directionData) {
-                    notFound++;
-                    continue;
-                }
-                // Проверяем, существует ли подгруппа для is_subgroup = true
-                if (a.is_subgroup && (!directionData.hasSubgroup || !directionData.subgroupData)) {
-                    notFound++;
-                    continue;
-                }
-
-                // Добавляем преподавателя, если его ещё нет
-                let teacher = currentData.teachers.find(t => t.name.trim().toLowerCase() === a.teacher_name.trim().toLowerCase());
-                if (!teacher) {
-                    teacher = {
-                        id: Date.now() + Math.random(),
-                        name: a.teacher_name.trim(),
-                        selected: true
-                    };
-                    currentData.teachers.push(teacher);
-                }
-
-                // Проверяем дубликат назначения
-                const exists = currentData.assignments.some(
-                    asgn => asgn.teacherId === teacher.id &&
-                            asgn.directionId == directionData.id &&
-                            asgn.isSubgroup === a.is_subgroup
-                );
-                if (exists) {
-                    skippedExists++;
-                    continue;
-                }
-                // Создаём новое назначение
-                currentData.assignments.push({
-                    id: a.id,
-                    teacherId: teacher.id,
-                    directionId: directionData.id,
-                    isSubgroup: a.is_subgroup,
-                    subjectName: directionData.subjectName,
-                    directionCode: directionData.code,
-                    facultyName: a.faculty_name || directionData.faculty,
-                    assignedAt: new Date().toISOString()
-                });
-                restored++;
-            }
-            // Обновляем интерфейс
-            updateTeachersDisplay();
-            updateDirectionDisplays();
-            updateAssignmentsDisplay();
-
-            let message = `Восстановлено назначений: ${restored}`;
-            if (notFound) message += `, не найдено в текущем файле: ${notFound}`;
-            if (skippedExists) message += `, уже существует: ${skippedExists}`;
-            showMessageWorkload(message, 'success');
-
-        } catch (error) {
-            showErrorWorkload('Ошибка восстановления истории: ' + error.message);
-        }
-    }
 
     function showLoadingWorkload(show) {
         document.getElementById('loadingWorkload').style.display = show ? 'block' : 'none';
@@ -2347,38 +2264,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
     window.showFileSelectModal = showFileSelectModal;
 
-    async function appendToSelectedFile(fileId) {
-        if (!currentDeptForAppend || !currentDeptForAppend.data) {
-            alert('Нет данных для добавления');
-            return;
-        }
-
-        const modal = document.getElementById('fileSelectModal');
-        const listContainer = document.getElementById('fileSelectList');
-        listContainer.innerHTML = '<div class="loading">Добавление данных...</div>';
-
-        try {
-            const response = await fetch(`/api/append-to-file/${fileId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    departmentData: currentDeptForAppend.data,
-                    course: currentDeptForAppend.course
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Ошибка при добавлении');
-            }
-
-            const result = await response.json();
-            alert(result.message || 'Данные успешно добавлены');
-            modal.style.display = 'none';
-        } catch (error) {
-            listContainer.innerHTML = `<div class="error">Ошибка: ${error.message}</div>`;
-        }
-    }
+    
 
     window.appendToSelectedFile = appendToSelectedFile;
 
@@ -2427,8 +2313,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 }
             }
         });
+        
 
         try {
+            /*
             const response = await fetch(`${SERVER_URL}/generate-department-excel`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2439,6 +2327,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     course: courseFilter !== 'all' ? courseFilter : null
                 })
             });
+            */
             
             if (!response.ok) {
                 const errorData = await response.json();
@@ -2599,18 +2488,10 @@ window.deleteUserFile = function(fileId) {
 };
 
 // ==================== АВТОРИЗАЦИЯ: ВЫХОД И ИМЯ ПОЛЬЗОВАТЕЛЯ ====================
-document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-    await fetch('/logout');
-    window.location.href = '/login';
-});
-
-fetch('/api/check-auth')
-    .then(res => res.json())
-    .then(data => {
-        if (data.authenticated) {
-            document.getElementById('currentUser').textContent = `👤 ${data.username}`;
-        }
-    });
+// document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+  //  await fetch('/logout');
+   // window.location.href = '/login';
+//});
 
 // Если вкладка "Мои файлы" активна при загрузке (редко), загружаем список
 if (document.getElementById('myfiles-app')?.classList.contains('active')) {
